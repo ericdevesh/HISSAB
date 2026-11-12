@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TransactionDao {
     @Query("SELECT * FROM transactions ORDER BY createdAt DESC") fun observeAll(): Flow<List<TransactionEntity>>
+    @Query("SELECT * FROM transactions ORDER BY createdAt DESC") suspend fun getAllForSync(): List<TransactionEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(item: TransactionEntity)
     @Query("DELETE FROM transactions WHERE id = :id") suspend fun delete(id: String)
     @Query("SELECT COALESCE(SUM(amountPaise),0) FROM transactions WHERE type='INCOME'") fun observeIncome(): Flow<Long>
