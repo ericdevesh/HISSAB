@@ -29,6 +29,21 @@ jobs:
         run: gradle :app:assembleDebug --stacktrace
       - name: Verify APK
         run: test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Launch app in Android emulator (startup smoke test)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb logcat -c
+            adb shell am start -W -n com.kharcha.app/.MainActivity
+            sleep 15
+            if ! adb shell pidof com.kharcha.app; then
+              adb logcat -d -v time
+              exit 1
+            fi
       - uses: actions/upload-artifact@v4
         with:
           name: HISAAB-debug-APK
