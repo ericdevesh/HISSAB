@@ -94,10 +94,10 @@ private fun HisaabApp(db: KharchaDatabase) {
         }) { padding ->
             when(tab) {
                 0 -> HomeScreen(Modifier.padding(padding), income, expenses, transactions, debts, budgets, goals, label) { tab = it }
-                1 -> TransactionScreen(Modifier.padding(padding), transactions, label) { txDao.delete(it) }
-                2 -> DebtScreen(Modifier.padding(padding), debts, label, { item -> selectedId=item.id; dialog="payment" }, { finance.deleteDebt(it) })
+                1 -> TransactionScreen(Modifier.padding(padding), transactions, label) { id -> scope.launch { txDao.delete(id) } }
+                2 -> DebtScreen(Modifier.padding(padding), debts, label, { item -> selectedId=item.id; dialog="payment" }, { id -> scope.launch { finance.deleteDebt(id) } })
                 3 -> ReportScreen(Modifier.padding(padding), income, expenses, transactions, debts, label)
-                4 -> GoalScreen(Modifier.padding(padding), goals, label, { item -> selectedId=item.id; dialog="saving" }, { finance.deleteGoal(it) })
+                4 -> GoalScreen(Modifier.padding(padding), goals, label, { item -> selectedId=item.id; dialog="saving" }, { id -> scope.launch { finance.deleteGoal(id) } })
                 else -> BudgetScreen(Modifier.padding(padding), budgets, transactions, label)
             }
         }
