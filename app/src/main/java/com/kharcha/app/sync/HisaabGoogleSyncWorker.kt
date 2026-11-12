@@ -5,10 +5,8 @@ import android.net.Uri
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.google.android.gms.auth.GoogleAuthUtil
-import com.google.android.gms.auth.UserRecoverableAuthException
 import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.common.Scopes
-import com.kharcha.app.data.KharchaDatabase
+import com.kharcha.app.data.SyncDatabaseFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -16,11 +14,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-class HisaabGoogleSyncWorker(
-    appContext: Context,
-    params: WorkerParameters
-) : CoroutineWorker(appContext, params) {
-
+class HisaabGoogleSyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
             val account = GoogleSignIn.getLastSignedInAccount(applicationContext)
@@ -30,13 +24,12 @@ class HisaabGoogleSyncWorker(
             val token = GoogleAuthUtil.getToken(applicationContext, account.account!!, scopes)
             val prefs = applicationContext.getSharedPreferences("hisaab_google_sync", Context.MODE_PRIVATE)
             var spreadsheetId = prefs.getString("spreadsheet_id_$accountName", null)
-
             if (spreadsheetId.isNullOrBlank()) {
-                spreadsheetId = findOrCreateSpreadsheet(token)
+                spreadsheetId = findExistingSpreadsheet(token) ?: createSpreadsheet(token)
                 prefs.edit().putString("spreadsheet_id_$accountName", spreadsheetId).apply()
             }
 
-            val db = KharchaDatabase.getInstance(applicationContext)
+            val db = SyncDatabaseFactory.get(applicationContext)
             val transactions = db.transactionDao().getAllForSync()
             val debts = db.financeDao().getAllDebtsForSync()
             val budgets = db.financeDao().getAllBudgetsForSync()
@@ -60,50 +53,49 @@ class HisaabGoogleSyncWorker(
             ))
             prefs.edit().putLong("last_sync_at", System.currentTimeMillis()).apply()
             Result.success()
-        } catch (_: UserRecoverableAuthException) {
-            Result.failure()
         } catch (_: Exception) {
             if (runAttemptCount < 5) Result.retry() else Result.failure()
         }
     }
 
-    private fun findOrCreateSpreadsheet(token: String): String {
+    private fun findExistingSpreadsheet(token: String): String? {
+        val query = Uri.encode("name='HISAAB Backup' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false")
+        val response = request("https://www.googleapis.com/drive/v3/files?q=$query&fields=files(id,name)&pageSize=10", "GET", token)
+        return JSONObject(response).optJSONArray("files")?.optJSONObject(0)?.optString("id")?.takeIf { it.isNotBlank() }
+    }
+
+    private fun createSpreadsheet(token: String): String {
         val body = JSONObject().put("properties", JSONObject().put("title", "HISAAB Backup"))
             .put("sheets", JSONArray().put(sheet("Transactions")).put(sheet("Udhari"))
                 .put(sheet("Budgets")).put(sheet("Savings Goals")))
-        val response = request(
-            "https://sheets.googleapis.com/v4/spreadsheets",
-            "POST", token, body.toString()
-        )
-        return JSONObject(response).getString("spreadsheetId")
+        return JSONObject(request("https://sheets.googleapis.com/v4/spreadsheets", "POST", token, body.toString())).getString("spreadsheetId")
     }
 
     private fun sheet(title: String) = JSONObject().put("properties", JSONObject().put("title", title))
 
     private fun writeTab(token: String, id: String, tab: String, values: JSONArray) {
         val range = Uri.encode("'$tab'!A1:Z")
-        request(
-            "https://sheets.googleapis.com/v4/spreadsheets/$id/values/$range?valueInputOption=RAW",
-            "PUT", token, JSONObject().put("majorDimension", "ROWS").put("values", values).toString()
-        )
+        request("https://sheets.googleapis.com/v4/spreadsheets/$id/values/$range?valueInputOption=RAW",
+            "PUT", token, JSONObject().put("majorDimension", "ROWS").put("values", values).toString())
     }
 
     private fun rows(header: List<Any>, data: List<List<Any>>): JSONArray {
-        val result = JSONArray()
-        result.put(JSONArray(header))
+        val result = JSONArray().put(JSONArray(header))
         data.forEach { result.put(JSONArray(it)) }
         return result
     }
 
-    private fun request(url: String, method: String, token: String, body: String): String {
+    private fun request(url: String, method: String, token: String, body: String? = null): String {
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.requestMethod = method
         connection.setRequestProperty("Authorization", "Bearer $token")
         connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
         connection.connectTimeout = 20000
         connection.readTimeout = 20000
-        connection.doOutput = true
-        connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+        if (body != null) {
+            connection.doOutput = true
+            connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+        }
         val code = connection.responseCode
         val stream = if (code in 200..299) connection.inputStream else connection.errorStream
         val response = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
