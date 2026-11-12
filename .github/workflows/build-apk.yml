@@ -1,4 +1,5 @@
 name: Build HISAAB Android APK
+# Re-trigger build after requested fresh run
 on:
   workflow_dispatch:
   push:
