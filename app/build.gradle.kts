@@ -35,10 +35,6 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.2")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    implementation("com.google.android.gms:play-services-auth:21.3.0")
-    implementation("com.google.api-client:google-api-client-android:2.7.0")
-    implementation("com.google.apis:google-api-services-sheets:v4-rev20240930-2.0.0")
-    implementation("com.google.apis:google-api-services-drive:v3-rev20240820-2.0.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
 }
