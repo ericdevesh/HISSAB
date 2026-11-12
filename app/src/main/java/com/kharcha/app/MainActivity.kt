@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.room.Room
 import com.kharcha.app.data.*
 import kotlinx.coroutines.launch
@@ -77,6 +78,7 @@ private fun HisaabApp(db: KharchaDatabase) {
             ).build()
     }
     val googleClient = remember { GoogleSignIn.getClient(context, googleOptions) }
+    var signedInEmail by remember { mutableStateOf(GoogleSignIn.getLastSignedInAccount(context)?.email) }
     fun queueGoogleSync() {
         WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<HisaabGoogleSyncWorker>().build())
         val periodic = PeriodicWorkRequestBuilder<HisaabGoogleSyncWorker>(15, TimeUnit.MINUTES).build()
@@ -84,7 +86,7 @@ private fun HisaabApp(db: KharchaDatabase) {
     }
     val signInLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-        if (task.isSuccessful) queueGoogleSync()
+        if (task.isSuccessful) { signedInEmail = task.result?.email; queueGoogleSync() }
     }
     LaunchedEffect(Unit) {
         if (GoogleSignIn.getLastSignedInAccount(context) != null) queueGoogleSync()
@@ -112,8 +114,30 @@ private fun HisaabApp(db: KharchaDatabase) {
     val label = { en: String, hi: String -> if (hindi) hi else en }
     MaterialTheme(colorScheme = darkColorScheme(primary = Blue, secondary = Violet, background = Ink, surface = Panel, onSurface = Color.White)) {
         Scaffold(containerColor = Ink, topBar = {
-            TopAppBar(title = { Column { Text("HISAAB", fontWeight = FontWeight.Black, color = Blue); Text(label("Your money, in control", "Aapka paisa, aapke control mein"), style = MaterialTheme.typography.labelSmall, color = Muted) } },
-                actions = { IconButton(onClick = { if (GoogleSignIn.getLastSignedInAccount(context) == null) signInLauncher.launch(googleClient.signInIntent) else queueGoogleSync() }) { Icon(Icons.Default.CloudSync, contentDescription = "Google Sheets sync", tint = Blue) }; TextButton(onClick = { hindi = !hindi }) { Text(if (hindi) "EN" else "हि", color = Blue, fontWeight = FontWeight.Bold) }; IconButton(onClick = { backupLauncher.launch("hisaab-backup-${monthKey}.csv") }) { Icon(Icons.Default.Backup, null, tint = Blue) } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = Ink))
+            TopAppBar(title = { Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.Image(
+                    painter = painterResource(id = com.kharcha.app.R.mipmap.ic_launcher),
+                    contentDescription = "HISAAB app logo",
+                    modifier = Modifier.size(42.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text("HISAAB", fontWeight = FontWeight.Black, color = Blue)
+                    Text(label("Your money, in control", "Aapka paisa, aapke control mein"), style = MaterialTheme.typography.labelSmall, color = Muted)
+                }
+            } },
+                actions = {
+                    TextButton(onClick = {
+                        if (GoogleSignIn.getLastSignedInAccount(context) == null) signInLauncher.launch(googleClient.signInIntent)
+                        else queueGoogleSync()
+                    }) {
+                        Icon(Icons.Default.CloudSync, contentDescription = null, tint = Blue)
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (signedInEmail == null) "Sign in with Google" else "Sync now", color = Blue, fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(onClick = { hindi = !hindi }) { Text(if (hindi) "EN" else "हि", color = Blue, fontWeight = FontWeight.Bold) }
+                    IconButton(onClick = { backupLauncher.launch("hisaab-backup-${monthKey}.csv") }) { Icon(Icons.Default.Backup, null, tint = Blue) }
+                }, colors = TopAppBarDefaults.topAppBarColors(containerColor = Ink))
         }, bottomBar = {
             NavigationBar(containerColor = Panel, contentColor = Blue) {
                 val nav = listOf(Triple(Icons.Default.Home, "Home", "होम"), Triple(Icons.Default.ReceiptLong, "Hisaab", "लेन-देन"), Triple(Icons.Default.People, "Udhari", "उधारी"), Triple(Icons.Default.Analytics, "Reports", "रिपोर्ट"), Triple(Icons.Default.Savings, "Goals", "बचत"), Triple(Icons.Default.PieChart, "Budget", "बजट"))
