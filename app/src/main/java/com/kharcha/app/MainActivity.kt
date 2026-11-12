@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.room.Room
 import com.kharcha.app.data.*
 import kotlinx.coroutines.launch
@@ -57,6 +58,7 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HisaabApp(db: KharchaDatabase) {
+    val context = LocalContext.current
     val txDao = db.transactionDao(); val finance = db.financeDao(); val scope = rememberCoroutineScope()
     val transactions by txDao.observeAll().collectAsState(initial = emptyList())
     val income by txDao.observeIncome().collectAsState(initial = 0L)
@@ -75,7 +77,7 @@ private fun HisaabApp(db: KharchaDatabase) {
         if (!spoken.isNullOrBlank()) { title = spoken; if (amount.isBlank()) amount = Regex("\\d+(?:[.,]\\d{1,2})?").find(spoken)?.value?.replace(',', '.') ?: "" }
     }
     val backupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
-        if (uri != null) runCatching { contentResolverForBackup(contentResolver, uri, transactions, debts, goals) }
+        if (uri != null) runCatching { contentResolverForBackup(context.contentResolver, uri, transactions, debts, goals) }
     }
     val label = { en: String, hi: String -> if (hindi) hi else en }
     MaterialTheme(colorScheme = darkColorScheme(primary = Blue, secondary = Violet, background = Ink, surface = Panel, onSurface = Color.White)) {
