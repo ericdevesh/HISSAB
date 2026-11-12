@@ -7,6 +7,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.Scope
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import com.kharcha.app.sync.HisaabGoogleSyncWorker
+import java.util.concurrent.TimeUnit
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -59,6 +68,27 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun HisaabApp(db: KharchaDatabase) {
     val context = LocalContext.current
+    val googleOptions = remember {
+        GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .requestScopes(
+                Scope("https://www.googleapis.com/auth/spreadsheets"),
+                Scope("https://www.googleapis.com/auth/drive.file")
+            ).build()
+    }
+    val googleClient = remember { GoogleSignIn.getClient(context, googleOptions) }
+    fun queueGoogleSync() {
+        WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<HisaabGoogleSyncWorker>().build())
+        val periodic = PeriodicWorkRequestBuilder<HisaabGoogleSyncWorker>(15, TimeUnit.MINUTES).build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork("hisaab-google-sheets-sync", ExistingPeriodicWorkPolicy.KEEP, periodic)
+    }
+    val signInLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        if (task.isSuccessful) queueGoogleSync()
+    }
+    LaunchedEffect(Unit) {
+        if (GoogleSignIn.getLastSignedInAccount(context) != null) queueGoogleSync()
+    }
     val txDao = db.transactionDao(); val finance = db.financeDao(); val scope = rememberCoroutineScope()
     val transactions by txDao.observeAll().collectAsState(initial = emptyList())
     val income by txDao.observeIncome().collectAsState(initial = 0L)
@@ -83,7 +113,7 @@ private fun HisaabApp(db: KharchaDatabase) {
     MaterialTheme(colorScheme = darkColorScheme(primary = Blue, secondary = Violet, background = Ink, surface = Panel, onSurface = Color.White)) {
         Scaffold(containerColor = Ink, topBar = {
             TopAppBar(title = { Column { Text("HISAAB", fontWeight = FontWeight.Black, color = Blue); Text(label("Your money, in control", "Aapka paisa, aapke control mein"), style = MaterialTheme.typography.labelSmall, color = Muted) } },
-                actions = { TextButton(onClick = { hindi = !hindi }) { Text(if (hindi) "EN" else "हि", color = Blue, fontWeight = FontWeight.Bold) }; IconButton(onClick = { backupLauncher.launch("hisaab-backup-${monthKey}.csv") }) { Icon(Icons.Default.Backup, null, tint = Blue) } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = Ink))
+                actions = { IconButton(onClick = { if (GoogleSignIn.getLastSignedInAccount(context) == null) signInLauncher.launch(googleClient.signInIntent) else queueGoogleSync() }) { Icon(Icons.Default.CloudSync, contentDescription = "Google Sheets sync", tint = Blue) }; TextButton(onClick = { hindi = !hindi }) { Text(if (hindi) "EN" else "हि", color = Blue, fontWeight = FontWeight.Bold) }; IconButton(onClick = { backupLauncher.launch("hisaab-backup-${monthKey}.csv") }) { Icon(Icons.Default.Backup, null, tint = Blue) } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = Ink))
         }, bottomBar = {
             NavigationBar(containerColor = Panel, contentColor = Blue) {
                 val nav = listOf(Triple(Icons.Default.Home, "Home", "होम"), Triple(Icons.Default.ReceiptLong, "Hisaab", "लेन-देन"), Triple(Icons.Default.People, "Udhari", "उधारी"), Triple(Icons.Default.Analytics, "Reports", "रिपोर्ट"), Triple(Icons.Default.Savings, "Goals", "बचत"), Triple(Icons.Default.PieChart, "Budget", "बजट"))
