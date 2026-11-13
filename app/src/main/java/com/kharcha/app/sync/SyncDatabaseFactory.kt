@@ -8,7 +8,7 @@ object SyncDatabaseFactory {
     @Volatile private var instance: KharchaDatabase? = null
     fun get(context: Context): KharchaDatabase = instance ?: synchronized(this) {
         instance ?: Room.databaseBuilder(context.applicationContext, KharchaDatabase::class.java, "kharcha.db")
-            .addMigrations(KharchaDatabase.MIGRATION_1_2)
+            .addMigrations(KharchaDatabase.MIGRATION_1_2, KharchaDatabase.MIGRATION_2_3)
             .build().also { instance = it }
     }
 }
