@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [TransactionEntity::class, DebtEntity::class, BudgetEntity::class, GoalEntity::class], version = 2, exportSchema = false)
+@Database(entities = [TransactionEntity::class, DebtEntity::class, BudgetEntity::class, GoalEntity::class], version = 3, exportSchema = false)
 abstract class KharchaDatabase : RoomDatabase() {
     abstract fun transactionDao(): TransactionDao
     abstract fun financeDao(): FinanceDao
@@ -18,6 +18,26 @@ abstract class KharchaDatabase : RoomDatabase() {
                 db.execSQL("CREATE TABLE IF NOT EXISTS debts (id TEXT NOT NULL PRIMARY KEY, person TEXT NOT NULL, phone TEXT NOT NULL, note TEXT NOT NULL, direction TEXT NOT NULL, totalPaise INTEGER NOT NULL, settledPaise INTEGER NOT NULL, createdAt INTEGER NOT NULL, dueAt INTEGER)")
                 db.execSQL("CREATE TABLE IF NOT EXISTS budgets (id TEXT NOT NULL PRIMARY KEY, category TEXT NOT NULL, limitPaise INTEGER NOT NULL, monthKey TEXT NOT NULL)")
                 db.execSQL("CREATE TABLE IF NOT EXISTS goals (id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, targetPaise INTEGER NOT NULL, savedPaise INTEGER NOT NULL, createdAt INTEGER NOT NULL)")
+            }
+        }
+
+        // Repair databases created by earlier v2 builds whose migration omitted syncStatus.
+        // Check the table first so both affected and already-correct v2 databases upgrade safely.
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                var hasSyncStatus = false
+                db.query("PRAGMA table_info(transactions)").use { cursor ->
+                    val nameColumn = cursor.getColumnIndex("name")
+                    while (cursor.moveToNext()) {
+                        if (nameColumn >= 0 && cursor.getString(nameColumn) == "syncStatus") {
+                            hasSyncStatus = true
+                            break
+                        }
+                    }
+                }
+                if (!hasSyncStatus) {
+                    db.execSQL("ALTER TABLE transactions ADD COLUMN syncStatus TEXT NOT NULL DEFAULT 'LOCAL_ONLY'")
+                }
             }
         }
     }
