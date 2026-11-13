@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val db = Room.databaseBuilder(applicationContext, KharchaDatabase::class.java, "kharcha.db")
-            .addMigrations(KharchaDatabase.MIGRATION_1_2).build()
+            .addMigrations(KharchaDatabase.MIGRATION_1_2, KharchaDatabase.MIGRATION_2_3).build()
         setContent { HisaabApp(db) }
     }
 }
